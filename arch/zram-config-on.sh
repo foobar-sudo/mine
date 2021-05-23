@@ -2,14 +2,15 @@
 # As of this moment, 4 zram devices is the only RECOMMENDED way of using this script.
 zramCount=4 # >0
 compAlgorithm="zstd"
-memory= # in mB (1024) (15931 - 16 GB)
+#memory= # in mB (1024) (15931 - 16 GB)
+memory=$(grep MemTotal /proc/meminfo | awk '{print $2}' | numfmt --from-unit=Ki --to-unit=Mi)
 # systemMemory
 if [[ -z "$memory" ]]; then echo "Memory variable is not set! Setting it as system's memory."; memory=$(grep MemTotal /proc/meminfo | awk '{print $2}' | numfmt --from-unit=Ki --to-unit=Mi); fi
 echo "Memory is ${memory} MiB."
 echo "Disabling zswap..."
 echo 0 > /sys/module/zswap/parameters/enabled
 echo "Modprobe zram..."
-modprobe zram
+modprobe zram num_devices=${zramCount}
 _suffix="M"
 _memoryLimitPercent="0.2125"
 _memoryLimit=$(awk -v n="${memory}" -v p="${_memoryLimitPercent}" 'BEGIN{print int(n*p)}')
