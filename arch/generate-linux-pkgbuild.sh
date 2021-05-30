@@ -1,16 +1,95 @@
 #!/bin/bash
+cd /tmp
 pkgver=$(curl -s https://www.kernel.org/ | grep -A1 'stable:' | grep -oP '(?<=strong>).*(?=</strong.*)' | head -n1)
 vermajor=$(echo $pkgver | grep -o1 "[0-9*].[0-9]*" | head -n1)
+verFirst=$(echo $pkgver | grep -oP "[0-9]?" | head -n1)
+#linuxSrc="\${_srcname}::git+https://git.kernel.org/pub/scm/linux/kernel/git/stable/\${_srcname}.git#branch=linux-\${_major}.y"
+linuxSrc="https://mirrors.edge.kernel.org/pub/linux/kernel/v$verFirst.x/\$_srcname.tar.xz"
+
+_patches=(
+"lucjan"
+"linux-tkgs"
+"cacule"
+"linuxRNG"
+)
+
+function lucjan() {
 gitdir="."
 patchdir="kernel-patches/$vermajor"
+clonedir="https://gitlab.com/sirlucjan/kernel-patches.git"
+branch="master"
+treeurl="https://gitlab.com/sirlucjan/kernel-patches/-/raw/$branch/$vermajor"
+unused=("*sep" "*-dev*" "*-trunk*" "*ll*" "*prjc-android-patches*" "*prjc-lru-patches*"
+#"*futex2-stable*" "*futex2*" "*futex-patches*"
+)
+#unused=()
+needed=("futex-patches" "futex2-stable-patches" "android" "cpu" "btrfs" "zstd-patches" "zstd-dev-patches" "xanmod-patches" "arch-patches" "pf-patches" "block-patches" "bfq-patches" "lqx-patches" "v4l2loopback-patches" "ntfs3" "clearlinux" "zen-patches" "initramfs-patches" "lru-patches" "fixes-miscellaneous" "bbr2-patches")
+#"mm-patches" "bbr2-patches" "ksm-patches" "lru-patches" "ntfs3"
+
 cd $gitdir
-git clone https://gitlab.com/sirlucjan/kernel-patches.git
-patchdirs=$(ls $patchdir | grep -vwE *sep | grep -vwE *-dev* | grep -vwE *-trunk* | grep -vwE *ll* | while read line; do if [[ $line = *-v* ]]; then (printf "%s\n" $patchdir/${line%-v*}* | grep -vwE *sep | grep -vwE *ll* | grep -vwE *-trunk* | grep -vwE *-dev* | tail -n1 | sed -rne "s|$patchdir/(.*)|\1|gp"); else ls $patchdir/$line*-v* 1>/dev/null 2>&1 || echo $line; fi; done | uniq)
+git clone $clonedir 2>/dev/null
+patchdirs=$(ls $patchdir | grep -vwE "$(printf "%s|" "${unused[@]}")" | while read line; do if [[ $line = *-v* ]]; then (printf "%s\n" $patchdir/${line%-v*}* | grep -vwE "$(printf "%s|" "${unused[@]}")" | tail -n1 | sed -rne "s|$patchdir/(.*)|\1|gp"); else ls $patchdir/$line*-v* 1>/dev/null 2>&1 || echo $line; fi; done | uniq)
 patchfiles=$(printf "%s\n" $patchdirs | while read line; do echo $(ls $patchdir/$line/*); done | sed -rne "s|$patchdir/(.*)|\1|gp")
-treeurl="https://gitlab.com/sirlucjan/kernel-patches/-/tree/master/$vermajor"
-cat << EOF > PKGBUILD.tmp
+printf "$treeurl/%s\n" $patchfiles | while read line; do echo $line | grep -qE $(printf -- "-e %s " "${needed[@]}") && echo $line; done
+#| while read line; do echo "$(echo $line | grep -Eo "[0-9]+-(.*).patch" | sed -rne 's|([0-9]+)-(.*).patch|9999-\2.patch|gp')::${line}"; done
+}
+
+function linux-tkgs() {
+gitdir="."
+patchdir="linux-tkg/linux-tkg-patches/$vermajor"
+clonedir="https://github.com/Frogging-Family/linux-tkg.git"
+branch="master"
+treeurl="https://raw.githubusercontent.com/Frogging-Family/linux-tkg/$branch/linux-tkg-patches/$vermajor"
+unused=()
+needed=(
+#"*futex2*" "*-fsync*"
+"*winesync*")
+
+cd $gitdir
+git clone $clonedir 2>/dev/null
+patchfiles=$(ls $patchdir | grep -vwE "$(printf "%s|" "${unused[@]}")")
+printf "$treeurl/%s\n" $patchfiles | while read line; do echo $line | grep -qE $(printf -- "-e %s " "${needed[@]}") && echo $line; done
+
+}
+
+function cacule() {
+branch=master
+#treeurl="https://raw.githubusercontent.com/ptr1337/linux-cacule-aur/$branch/patches/$vermajor/cacule-patches"
+treeurl="https://raw.githubusercontent.com/hamadmarri/cacule-cpu-scheduler/$branch/patches/CacULE/v${vermajor}"
+patch="cacule-$vermajor.patch"
+patchfiles=("${treeurl}/${patch}")
+treeurl="https://raw.githubusercontent.com/ptr1337/linux-cacule-aur/$branch/patches/$vermajor/cacule-patches"
+patch="0002-cacule-Change-default-preemption-latency-to-2ms-for-.patch"
+patchfiles=("${patchfiles[@]}" "${treeurl}/${patch}")
+printf "%s\n" "${patchfiles[@]}"
+#https://raw.githubusercontent.com/hamadmarri/cacule-cpu-scheduler/master/patches/CacULE/v5.12/
+#https://raw.githubusercontent.com/ptr1337/linux-cacule-aur/master/patches/5.12/cacule-patches/cacule-5.12.patch
+#https://raw.githubusercontent.com/ptr1337/linux-cacule-aur/master/patches/5.12/cacule-patches/0002-cacule-Change-default-preemption-latency-to-2ms-for-.patch
+}
+
+function linuxRNG() {
+link="https://github.com/smuellerDD/lrng.git"
+git clone --depth 1 --filter=blob:none --sparse $link lrng-$vermajor 2>/dev/null; cd lrng-$vermajor
+git sparse-checkout init --cone; git sparse-checkout set kernel_patches/v$vermajor; cd ..
+patchLink="https://raw.githubusercontent.com/smuellerDD/lrng/master/kernel_patches/v$vermajor"
+for patch in lrng-$vermajor/kernel_patches/v$vermajor/*.patch; do echo "$patchLink/$(basename $patch)"; done
+}
+
+function patches() {
+_sort=("arch-patches" "cacule" "cpu-patches" "futex-patches" "futex2-stable-patches" "winesync" "zen-patches" "lqx-patches" "bfq-patches" "block-patches" "fixes-miscellaneous" "bbr2-patches" "btrfs-patches" "android-patches" "pf-patches" "lru-patches" "ntfs3-patches" "zstd-dev" "clearlinux-patches"
+"initramfs-patches"
+"smuellerDD/lrng" #linux random number generator
+)
+#printf "%s\n" "$(for patch in "${_patches[@]}"; do eval "$patch"; done)" |
+patchText=$(for patch in "${_patches[@]}"; do eval "$patch"; done)
+sortedText=$(printf "%s\n" "${_sort[@]}" | while read line; do { echo "$(printf "%s\n" ${patchText[@]} | while read patch; do echo $patch | grep -q $line && echo "$patch"; done)"; }; done | awk 'NF')
+echo "$sortedText"
+#grep --color -P "[^.patch]https://(.*?$line\.patch)\s"
+}
+
+cat << EOF > PKGBUILD
 #THIS FILE WAS AUTOMATICALLY GENERATED ON $(date -Ru${SOURCE_DATE_EPOCH:+d @$SOURCE_DATE_EPOCH})
-_major=$vermajor
+_major=$pkgver
 pkgbase=linux-custom-git
 pkgver="${pkgver}.custom1"
 pkgrel=1
@@ -24,21 +103,24 @@ makedepends=(
   git
 )
 options=('!strip')
-_srcname=linux
-source=(git://git.kernel.org/pub/scm/linux/kernel/git/stable/${_srcname}.git#branch=linux-${_major}.y
-$(printf "$treeurl/%s\n" $patchfiles)
-.config::https://git.archlinux.org/svntogit/packages.git/plain/trunk/config?h=packages/linux
+_srcname=linux-${pkgver}
+source=(
+$linuxSrc
+config::https://git.archlinux.org/svntogit/packages.git/plain/trunk/config?h=packages/linux
+$(patches)
+)
+sha256sums=('SKIP'
+'SKIP'
+$(echo "$(patches)" | while read line; do echo "'SKIP'"; done)
 )
 EOF
 
-cat << "EOF" >> PKGBUILD.tmp
+cat << "EOF" >> PKGBUILD
 validpgpkeys=(
   'ABAF11C65A2970B130ABE3C479BE3E4300411886'  # Linus Torvalds
   '647F28654894E3BD457199BE38DBBDC86092693E'  # Greg Kroah-Hartman
   'A2FF3A36AAA56654109064AB19802F8B0D70FC30'  # Jan Alexander Steffens (heftig)
 )
-sha256sums=('SKIP'
-            '6dde032690644a576fd36c4a7d3546d9cec0117dd3fb17cea6dc95e907ef9bef')
 
 export KBUILD_BUILD_HOST=archlinux
 export KBUILD_BUILD_USER=$pkgbase
@@ -56,40 +138,80 @@ prepare() {
   for src in "${source[@]}"; do
     src="${src%%::*}"
     src="${src##*/}"
-    [[ $src = .config ]] && echo "Setting config..."; cp "../$src" .config
     [[ $src = *.patch ]] || continue
     echo "Applying patch $src..."
-    patch -Np1 < "../$src"
+   patch -Np1 < "../$src" || true
   done
 
-  #echo "Setting config..."
-  #cp ../config .config
-  #make olddefconfig
+  echo "Setting config..."
+  cp ../config .config
+  make olddefconfig
   echo "Making some changes to config..."
+  scripts/config --enable CONFIG_ASHMEM
+  scripts/config --enable CONFIG_ANDROID
+  scripts/config --enable CONFIG_ANDROID_BINDER_IPC
+  scripts/config --enable CONFIG_ANDROID_BINDERFS
+  scripts/config --set-str CONFIG_ANDROID_BINDER_DEVICES "binder,hwbinder,vndbinder"
   scripts/config --enable CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3
   scripts/config --enable CONFIG_HZ_1000
-  scripts/config --set-val CONFIG_HZ 1000
+  scripts/config --enable CONFIG_HZ_2000
+  scripts/config --enable HZ_2000
+  scripts/config --set-val CONFIG_HZ 2000
   scripts/config --enable CONFIG_MNATIVE_INTEL
-  scripts/config --enable CONFIG_SCHED_PDS
   scripts/config --enable CONFIG_CPU_FREQ_DEFAULT_GOV_PERFORMANCE
   scripts/config --enable CONFIG_UNEVICTABLE_FILE
   scripts/config --set-val CONFIG_UNEVICTABLE_FILE_KBYTES_LOW 262144
   scripts/config --set-val CONFIG_UNEVICTABLE_FILE_KBYTES_MIN 131072
   scripts/config --enable CONFIG_BTRFS_FS_POSIX_ACL
   scripts/config --disable CONFIG_HZ_300
+  scripts/config --disable CGROUP_SCHED
+  scripts/config --disable SCHED_AUTOGROUP
+  scripts/config --disable FAIR_GROUP_SCHED
+  scripts/config --disable CFS_BANDWIDTH
+  scripts/config --disable CONFIG_BSD_PROCESS_ACCT
+  scripts/config --disable CONFIG_TASK_XACCT
+  scripts/config --disable CONFIG_PSI
+  scripts/config --disable CONFIG_AUDIT
   scripts/config --disable CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL
   scripts/config --disable CONFIG_CPU_FREQ_GOV_ONDEMAND
   scripts/config --disable CONFIG_CPU_FREQ_GOV_CONSERVATIVE
   scripts/config --disable CONFIG_CPU_FREQ_GOV_USERSPACE
   scripts/config --disable CONFIG_CPU_FREQ_GOV_SCHEDUTIL
   scripts/config --disable CONFIG_LL_BRANDING
+  scripts/config --disable CONFIG_SCHED_PDS
   scripts/config --disable CONFIG_SCHED_BMQ
   scripts/config --disable CONFIG_NUMA
   scripts/config --disable CONFIG_MODULE_COMPRESS_XZ
-  echo "Make menuconfig..."
-
+  scripts/config --disable CONFIG_DEBUG_INFO
+  scripts/config --disable CONFIG_CGROUP_BPF
+  scripts/config --disable CONFIG_BPF_LSM
+  scripts/config --disable CONFIG_BPF_PRELOAD
+  scripts/config --disable CONFIG_BPF_LIRC_MODE2
+  scripts/config --disable CONFIG_BPF_KPROBE_OVERRIDE
+  scripts/config --disable CONFIG_LATENCYTOP
+  scripts/config --disable CONFIG_SCHED_DEBUG
+  scripts/config --disable CONFIG_KVM_WERROR
+  scripts/config --disable CONFIG_RETPOLINE
+  scripts/config --disable CONFIG_X86_5LEVEL
+  scripts/config --disable CONFIG_KEXEC
+  scripts/config --disable CONFIG_KEXEC_FILE
+  scripts/config --disable CONFIG_CRASH_DUMP
+  echo '
+  CONFIG_LRNG=y
+  CONFIG_LRNG_CONTINUOUS_COMPRESSION_DISABLED=y
+  CONFIG_LRNG_SWITCHABLE_CONTINUOUS_COMPRESSION=y
+  CONFIG_LRNG_COLLECTION_SIZE_1024=y
+  CONFIG_LRNG_COLLECTION_SIZE=1024
+  CONFIG_LRNG_DRNG_SWITCH=y
+  CONFIG_LRNG_KCAPI_HASH=y
+  CONFIG_LRNG_DRBG=y
+  CONFIG_LRNG_RCT_CUTOFF=31
+  CONFIG_LRNG_APT_CUTOFF=325
+  CONFIG_CRYPTO_DRBG_MENU=y
+  CONFIG_CRYPTO_DRBG=y' >> .config
   make -s kernelrelease > version
   echo "Prepared $pkgbase version $(<version)"
+  echo "Make menuconfig..."
   make menuconfig
 }
 

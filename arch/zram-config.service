@@ -1,5 +1,5 @@
 [Unit]
-Description=ZRAM Config (swap, /tmp, and kernel parameter tweaks)
+Description=ZRAM Config (swap, /tmp)
 After=local-fs.target
 
 [Service]
