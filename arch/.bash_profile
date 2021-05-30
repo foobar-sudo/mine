@@ -40,5 +40,6 @@ if [[ -z $DISPLAY ]] && [[ "$(tty)" = "/dev/tty1" ]] && [[ $exec = "sway" ]]; th
   export QT_QPA_PLATFORM=wayland
   if ! [[ -z $_layout ]]; then export XKB_DEFAULT_LAYOUT="$_layout"; fi
   if ! [[ -z $_options ]]; then export XKB_DEFAULT_OPTIONS="$_options"; fi
+  export BEMENU_BACKEND=wayland
   exec sway
 fi
