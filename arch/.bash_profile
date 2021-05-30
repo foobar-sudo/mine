@@ -4,6 +4,8 @@
 [[ -f ~/.bashrc ]] && . ~/.bashrc
 _lang="ru_RU.UTF-8"
 _exec="sway"
+_layout="us,ru"
+_options="grp:win_space_toggle,grp_led:scroll"
 export LANG=${_lang}
 export LANGUAGE=${_lang}
 export LC_CTYPE=${_lang}
@@ -36,5 +38,7 @@ if [[ -z $DISPLAY ]] && [[ "$(tty)" = "/dev/tty1" ]] && [[ $exec = "sway" ]]; th
   export CLUTTER_BACKEND=wayland
   export QT_QPA_PLATFORMTHEME=qt5ct
   export QT_QPA_PLATFORM=wayland
+  if ! [[ -z $_layout ]]; then export XKB_DEFAULT_LAYOUT="$_layout"; fi
+  if ! [[ -z $_options ]]; then export XKB_DEFAULT_OPTIONS="$_options"; fi
   exec sway
 fi
